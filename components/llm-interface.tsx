@@ -1,8 +1,7 @@
 "use client"
 import { useState, useRef, useEffect } from "react"
-import { useChat } from "@ai-sdk/react"
-import { History, Terminal, User, Download, RotateCw, LoaderCircle, Lock } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useChat, type Message } from "@ai-sdk/react"
+import { History, Terminal, User, Download, RotateCw, LoaderCircle, Lock, Wrench } from "lucide-react"
 
 const NotionIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-5 w-5">
@@ -17,19 +16,66 @@ const NotionIcon = () => (
   </svg>
 )
 
+// Componente para renderizar uma única mensagem
+function ChatMessage({ message }: { message: Message }) {
+  const { role, content, toolInvocations } = message
+
+  // Renderiza a mensagem do usuário
+  if (role === "user") {
+    return (
+      <div className="flex items-start gap-4 flex-row-reverse">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-900/20 text-yellow-400/80 flex-shrink-0">
+          <User className="h-5 w-5" />
+        </div>
+        <div className="flex-1 pt-1.5">
+          <p>{content}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Renderiza a mensagem da assistente (Isis)
+  if (role === "assistant") {
+    return (
+      <div className="flex items-start gap-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800/50 text-yellow-400/80 flex-shrink-0">
+          <Terminal className="h-5 w-5" />
+        </div>
+        <div className="flex-1 rounded-lg bg-gray-900/50 p-4 space-y-2">
+          {content && <p>{content}</p>}
+          {toolInvocations?.map((tool) => (
+            <div key={tool.toolCallId} className="p-2 border-l-2 border-yellow-400/50 bg-gray-800/50 rounded-r-md">
+              <p className="text-sm font-semibold text-yellow-400/80">
+                <LoaderCircle className="inline-block h-4 w-4 mr-2 animate-spin" />
+                Usando a ferramenta: {tool.toolName}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Renderiza o resultado da ferramenta
+  if (role === "tool") {
+    return (
+      <div className="flex items-start gap-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800/50 text-gray-500 flex-shrink-0">
+          <Wrench className="h-5 w-5" />
+        </div>
+        <div className="flex-1 rounded-lg bg-gray-900/50 p-4 border border-dashed border-gray-700">
+          <p className="text-sm text-gray-400">{content}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
 export function LlmInterface() {
   const [notepadContent, setNotepadContent] = useState("")
-  // Garantimos que messages e input tenham valores padrão para evitar erros
-  const {
-    messages = [],
-    input = "",
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    setMessages,
-  } = useChat({
-    api: "/api/chat",
-  })
+  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat({ api: "/api/chat" })
 
   const handleRestart = () => {
     setMessages([])
@@ -40,17 +86,9 @@ export function LlmInterface() {
   const chatContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const chatContainer = chatContainerRef.current
-    const notepad = document.getElementById("notepad") as HTMLTextAreaElement | null
-    const handleScroll = () => {
-      if (chatContainer && notepad) {
-        const scrollPercentage = chatContainer.scrollTop / (chatContainer.scrollHeight - chatContainer.clientHeight)
-        notepad.scrollTop = scrollPercentage * (notepad.scrollHeight - notepad.clientHeight)
-      }
-    }
-    chatContainer?.addEventListener("scroll", handleScroll)
-    return () => chatContainer?.removeEventListener("scroll", handleScroll)
-  }, [])
+    // Auto-scroll para a última mensagem
+    chatContainerRef.current?.scrollTo(0, chatContainerRef.current.scrollHeight)
+  }, [messages])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -65,22 +103,18 @@ export function LlmInterface() {
       <header className="flex h-14 items-center justify-center gap-4 border-b border-gray-800/50 px-4 flex-shrink-0">
         <button className="p-2 rounded-md hover:bg-yellow-900/20 text-yellow-400/80 hover:text-yellow-400 transition-colors">
           <Download className="h-5 w-5" />
-          <span className="sr-only">Save as Markdown</span>
         </button>
         <button
           onClick={handleRestart}
           className="p-2 rounded-md hover:bg-yellow-900/20 text-yellow-400/80 hover:text-yellow-400 transition-colors"
         >
           <RotateCw className="h-5 w-5" />
-          <span className="sr-only">Restart Chat</span>
         </button>
         <button className="p-2 rounded-md hover:bg-yellow-900/20 text-yellow-400/80 hover:text-yellow-400 transition-colors">
           <NotionIcon />
-          <span className="sr-only">Save to Notion</span>
         </button>
         <button className="p-2 rounded-md hover:bg-yellow-900/20 text-yellow-400/80 hover:text-yellow-400 transition-colors">
           <Lock className="h-5 w-5" />
-          <span className="sr-only">Lock Chat</span>
         </button>
       </header>
       <div className="flex flex-1 overflow-hidden">
@@ -93,43 +127,23 @@ export function LlmInterface() {
           </div>
         </aside>
         <main className="flex-1 flex flex-col" onClick={handleContainerClick}>
-          <div ref={chatContainerRef} className="flex-1 p-6 overflow-y-auto relative">
-            {messages.length === 0 && !isLoading && (
-              <div className="absolute inset-0 flex items-start justify-start pt-16 pl-16 transition-opacity duration-500">
-                <div
-                  className={cn(
-                    "text-8xl md:text-9xl font-mono text-yellow-400/80 transition-all duration-300",
-                    input.length > 0 && "text-3xl opacity-0",
-                  )}
-                >
-                  {">"}
-                  <span className="animate-blink">_</span>
+          <div ref={chatContainerRef} className="flex-1 p-6 overflow-y-auto">
+            {messages.length === 0 && !isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="text-8xl md:text-9xl font-mono text-yellow-400/80">
+                    {">"}
+                    <span className="animate-blink">_</span>
+                  </div>
                 </div>
               </div>
+            ) : (
+              <div className="space-y-8">
+                {messages.map((m) => (
+                  <ChatMessage key={m.id} message={m} />
+                ))}
+              </div>
             )}
-            <div className="space-y-8">
-              {messages.map((m) => (
-                <div key={m.id} className={cn("flex items-start gap-4", m.role === "user" && "flex-row-reverse")}>
-                  <div
-                    className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-full text-yellow-400/80 flex-shrink-0",
-                      m.role === "assistant" ? "bg-gray-800/50" : "bg-yellow-900/20",
-                    )}
-                  >
-                    {m.role === "assistant" ? <Terminal className="h-5 w-5" /> : <User className="h-5 w-5" />}
-                  </div>
-                  <div className={cn("flex-1", m.role === "user" && "pt-1.5")}>
-                    {m.role === "assistant" ? (
-                      <div className="rounded-lg bg-gray-900/50 p-4">
-                        <p>{m.content}</p>
-                      </div>
-                    ) : (
-                      <p>{m.content}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
           <div className="border-t border-gray-800/50 p-4 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
             <form onSubmit={handleSubmit} className="relative">
