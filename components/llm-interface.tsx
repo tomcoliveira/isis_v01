@@ -19,7 +19,15 @@ const NotionIcon = () => (
 
 export function LlmInterface() {
   const [notepadContent, setNotepadContent] = useState("")
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat({
+  // Garantimos que messages e input tenham valores padrão para evitar erros
+  const {
+    messages = [],
+    input = "",
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    setMessages,
+  } = useChat({
     api: "/api/chat",
   })
 
